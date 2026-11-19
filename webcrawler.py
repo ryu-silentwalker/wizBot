@@ -5,6 +5,9 @@ import requests
 import unittest
 from time import sleep
 from json import dump
+from io import BytesIO
+from hashlib import sha256
+
 
 class webscraper:
     def __init__(self):
@@ -17,14 +20,23 @@ class webscraper:
             resp = driver.page_source
             driver.delete_all_cookies()
             an_el_resp = dict()
+            ## testing for image based question
             if resp != None:
                 soup = BeautifulSoup(resp, "html.parser")
-                an_container = soup.find_all("span", class_="answerText")
-                q_el = soup.select_one("div.quizQuestion").text.strip()
-                an_el_resp[q_el] = list()
-                for an_el in an_container:
-                    an_txt      = an_el.text.strip()
-                    an_el_resp[q_el].append(str(an_txt))
+                try:
+                    container = soup.select_one("table.darkerparchment_content")
+                    image_el_src = container.find("img").get("src") ##absolute path is in src
+                    headers = {"User-Agent": "Mozilla/5.0"}
+                    image_wb = requests.get(image_el_src,headers=headers,timeout=10).content
+                    q_el = sha256(image_wb).hexdigest()
+                except:
+                    q_el = soup.select_one("div.quizQuestion").text.strip()
+                finally:
+                    an_container = soup.find_all("span", class_="answerText")
+                    an_el_resp[q_el] = list()
+                    for an_el in an_container:
+                        an_txt      = an_el.text.strip()
+                        an_el_resp[q_el].append(str(an_txt))
                 return an_el_resp
             else:
                 resp.raise_for_status()
@@ -38,7 +50,7 @@ class webscraper:
         q = dict()
         count = 0
         while flag:
-            q_el = self.getTarget(target,driver) ##Need function to detect image quizes.
+            q_el = self.getTarget(target,driver)
             test = str(next(iter(q_el.items()))[0])
             if str(next(iter(q_el.items()))[0]) in q:
                 count += 1
@@ -92,7 +104,7 @@ class testScraper(unittest.TestCase):
     #        self.assertEqual(len(an_el[i]),4)
     #def test_getTarget_multi(self):
     #    scraper = webscraper()
-    #    target = "https://www.wizard101.com/quiz/trivia/game/animated-film-oscar-winners-trivia"
+    #    target = "https://www.wizard101.com/quiz/trivia/game/dog-breeds-trivia"
     #    an_el = scraper.getTarget_multi(target,25)
     #    self.assertEqual(len(an_el),15)
     #def test_scrapeAvailableQuizes(self):
@@ -102,13 +114,12 @@ class testScraper(unittest.TestCase):
     #    self.assertEqual(len(an_el),34)
     def test_scrape(self):
         scaper = webscraper()
-        limit = 25
+        limit = 100
         target = "https://www.wizard101.com/quiz/trivia/game/fun-trivia"
         an_el = scaper.scrape(target,limit)
         with open("parentData.json", "w", encoding="utf-8") as out:
             dump(an_el, out, indent=2, sort_keys=True)
         print(an_el)
-
 
 
 if __name__=="__main__":

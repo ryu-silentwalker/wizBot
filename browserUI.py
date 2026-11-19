@@ -16,6 +16,8 @@ from random import choice
 from random import random as rand
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait
+from io import BytesIO
+from hashlib import sha256
 
 
 class botFactory:
@@ -94,8 +96,7 @@ class browserUI:
         try:
             l_butt  = driver.find_element(By.CLASS_NAME, "wizardButtonInput")
         except:
-            loginCont = driver.find_element(By.CSS_SELECTOR, "div.wizardButtonInput")
-            l_butt  = loginCont.find_element("input")
+            l_butt  = driver.find_element(By.CLASS_NAME, "override")
         u_field.send_keys(user)
         p_field.send_keys(self.passd)
         l_butt.click()
@@ -106,7 +107,7 @@ class browserUI:
             while driver.find_element(By.ID, "nextQuestion"):
                 an_el_list = driver.find_elements(By.CLASS_NAME, "answer")
                 nextButt = driver.find_element(By.ID, "nextQuestion")
-                questionText = driver.find_element(By.CLASS_NAME, "quizQuestion").text
+                questionText = self.resolveQuestion(driver)
                 randomSelection = choice(an_el_list)
                 checkBox = randomSelection.find_element(By.CLASS_NAME, "largecheckbox")
                 answerText = randomSelection.find_element(By.CLASS_NAME, "answerText").text
@@ -130,16 +131,26 @@ class browserUI:
             answerContainer = soup.find(id="quizResults")
             for div in answerContainer:
                 if div.text not in ['\n','QUIZ CORRECT ANSWERS']:
-                    q_el = div.text.split(" Answer: ")
-                    q_text = q_el[0][4:].strip()
-                    q_resp_val = q_el[1].split()[-1]
-                    match q_resp_val:
-                        case "Incorrect":
-                            val = 0
-                        case "Correct!":
-                            val = 1
-                    if resp_dict.get(q_text) != ():
-                        resp_dict[q_text]["valid"] = val
+                    try:
+                        image_el_src = div.find("img").get("src") ##absolute path is in src
+                        headers = {"User-Agent": "Mozilla/5.0"}
+                        image_wb = requests.get(image_el_src,headers=headers,timeout=10).content
+                        q_el = sha256(image_wb).hexdigest()
+                        q_resp = div.text.split(" Answer: ")
+                        q_text = q_el
+                        q_resp_val = q_resp[1].split()[-1]
+                    except:
+                        q_el = div.text.split(" Answer: ")
+                        q_text = q_el[0][4:].strip()
+                        q_resp_val = q_el[1].split()[-1]
+                    finally:
+                            match q_resp_val:
+                                case "Incorrect":
+                                    val = 0
+                                case "Correct!":
+                                    val = 1
+                            if resp_dict.get(q_text) != ():
+                                resp_dict[q_text]["valid"] = val
         return resp_dict
 
     def secondPassLogic(self,driver,childList,user):
@@ -149,7 +160,7 @@ class browserUI:
             while driver.find_element(By.ID, "nextQuestion"):
                 an_el_list = driver.find_elements(By.CLASS_NAME, "answer")
                 nextButt = driver.find_element(By.ID, "nextQuestion")
-                questionText = driver.find_element(By.CLASS_NAME, "quizQuestion").text
+                questionText = self.resolveQuestion(driver)
                 randomSelection = choice(childList.get(questionText))
                 for an_el in an_el_list:
                     if an_el.find_element(By.CLASS_NAME, "answerText").text == randomSelection:
@@ -174,17 +185,37 @@ class browserUI:
             answerContainer = soup.find(id="quizResults")
             for div in answerContainer:
                 if div.text not in ['\n','QUIZ CORRECT ANSWERS']:
-                    q_el = div.text.split(" Answer: ")
-                    q_text = q_el[0][4:].strip()
-                    q_resp_val = q_el[1].split()[-1]
-                    match q_resp_val:
-                        case "Incorrect":
-                            val = 0
-                        case "Correct!":
-                            val = 1
-                    if resp_dict.get(q_text) != ():
-                        resp_dict[q_text]["valid"] = val
+                    try:
+                        image_el_src = div.find("img").get("src") ##absolute path is in src
+                        headers = {"User-Agent": "Mozilla/5.0"}
+                        image_wb = requests.get(image_el_src,headers=headers,timeout=10).content
+                        q_el = sha256(image_wb).hexdigest()
+                        q_resp = div.text.split(" Answer: ")
+                        q_text = q_el
+                        q_resp_val = q_resp[1].split()[-1]
+                    except:
+                        q_el = div.text.split(" Answer: ")
+                        q_text = q_el[0][4:].strip()
+                        q_resp_val = q_el[1].split()[-1]
+                    finally:
+                            match q_resp_val:
+                                case "Incorrect":
+                                    val = 0
+                                case "Correct!":
+                                    val = 1
+                            if resp_dict.get(q_text) != ():
+                                resp_dict[q_text]["valid"] = val
         return resp_dict
+    def resolveQuestion(self,driver):
+        try: ##converted from webcrawler for consistancy
+            container = driver.find_element(By.CLASS_NAME, "darkerparchment_content")
+            image_el_src = container.find_element(By.TAG_NAME, "img").get_attribute("src") ##absolute path is in src
+            headers = {"User-Agent": "Mozilla/5.0"}
+            image_wb = requests.get(image_el_src,headers=headers,timeout=10).content
+            q_el = sha256(image_wb).hexdigest()
+        except:
+            q_el = driver.find_element(By.CLASS_NAME, "quizQuestion").text
+        return q_el
 
     def take_quiz(self,target,driver,attempt,parentList,user):
         driver.get(target)
@@ -200,7 +231,7 @@ class browserUI:
                             childList[key] = [resp_dict[key]["resp"]]
                         else:
                             raise KeyError
-                except:
+                except Exception as err:
                     return 0
             case attempt if attempt > 0:
                 try:
@@ -212,7 +243,7 @@ class browserUI:
                             childList[key] = [resp_dict[key]["resp"]]
                         else:
                             raise KeyError
-                except:
+                except Exception as err:
                     return 0
 
         return childList
@@ -224,8 +255,8 @@ class browserUI:
             if "sameSite" in cookie: del cookie["sameSite"]
             if cookie['domain'] == str(domain): driver.add_cookie(cookie)
 
-    def getAnswers(self,target):
-        with open("parentData.json","r") as parentFile: childData = json.load(parentFile).copy()[target.split('/')[-1]]
+    def getAnswers(self,target,parentData):
+        childData = parentData.copy()
         att = 0
         driver = webdriver.Firefox()
         for user in self.userData:
@@ -246,66 +277,67 @@ class browserUI:
 
 
 class test_browserUI(unittest.TestCase):
-    def test_makeLogin(self):
-        fact = botFactory()
-        info = fact.makeLogin(1000)
-    def test_inputData(self):
-        fact = botFactory()
-        driver = webdriver.Firefox()
-        userData = {'username': 'MELINDAZHOU587', 'age': 9}
-        fact.inputData(driver,userData)
-    def test_pipeLine(self):
-        fact = botFactory()
-        limit = 1
-        userdata = fact.pipeLine(limit)
-        with open("userData.json",'w',encoding='utf=8') as userDataFile: json.dump(userdata,userDataFile,indent=2)
-    def test_login(self):
-        brow = browserUI()
-        user = getenv("userNames").split(',')[0]
-        driver = webdriver.Firefox()
-        target = "https://www.wizard101.com/quiz/trivia/game/fun-trivia"
-        brow.login(target,driver,user)
-        driver.quit()
-    def test_firstPassLogic(self):
-        brow = browserUI()
-        user = getenv("userNames").split(',')[0]
-        driver = webdriver.Firefox()
-        target = "https://www.wizard101.com/quiz/trivia/game/fun-trivia"
-        target2 = "https://www.wizard101.com/quiz/trivia/game/animated-film-oscar-winners-trivia"
-        brow.login(target,driver,user)
-        driver.get(target2)
-        brow.firstPassLogic(driver)
-        driver.quit()
-    def test_secondPassLogic(self):
-        brow = browserUI()
-        user = getenv("userNames").split(',')[0]
-        driver = webdriver.Firefox()
-        target = "https://www.wizard101.com/quiz/trivia/game/fun-trivia"
-        target2 = "https://www.wizard101.com/quiz/trivia/game/texas-facts-trivia"
-        brow.login(target,driver,user)
-        driver.get(target2)
-        with open("parentData.json","r") as infile:
-            data = json.load(infile)
-        brow.secondPassLogic(driver,data[target2.split('/')[-1]],user)
-        driver.quit()
-    def test_take_quiz(self):
-        with open("parentData.json","r") as infile: parentList = json.load(infile)
-        user = getenv("userNames").split(',')[0]
-        with open(f"{user}_cookies.json","r") as cookieFile: cookies = json.load(cookieFile)
-        brow = browserUI()
-        driver = webdriver.Firefox()
-        target = "https://www.wizard101.com/quiz/trivia/game/fun-trivia"
-        brow.login(target,driver,user)
-        for cookie in cookies:
-            del cookie["sameSite"]
-            driver.add_cookie(cookie)
-        target2 = "https://www.wizard101.com/quiz/trivia/game/horse-trivia"
-        brow.take_quiz(target2,driver,1,parentList,user)
-        driver.quit()
+    #def test_makeLogin(self):
+    #    fact = botFactory()
+    #    info = fact.makeLogin(1000)
+    #def test_inputData(self):
+    #    fact = botFactory()
+    #    driver = webdriver.Firefox()
+    #    userData = {'username': 'MELINDAZHOU587', 'age': 9}
+    #    fact.inputData(driver,userData)
+    #def test_pipeLine(self):
+    #    fact = botFactory()
+    #    limit = 1
+    #    userdata = fact.pipeLine(limit)
+    #    with open("userData.json",'w',encoding='utf=8') as userDataFile: json.dump(userdata,userDataFile,indent=2)
+    #def test_login(self):
+    #    brow = browserUI()
+    #    user = getenv("userNames").split(',')[0]
+    #    driver = webdriver.Firefox()
+    #    target = "https://www.wizard101.com/quiz/trivia/game/fun-trivia"
+    #    brow.login(target,driver,user)
+    #    driver.quit()
+    #def test_firstPassLogic(self):
+    #    brow = browserUI()
+    #    user = getenv("userNames").split(',')[0]
+    #    driver = webdriver.Firefox()
+    #    target = "https://www.wizard101.com/quiz/trivia/game/fun-trivia"
+    #    target2 = "https://www.wizard101.com/quiz/trivia/game/animated-film-oscar-winners-trivia"
+    #    brow.login(target,driver,user)
+    #    driver.get(target2)
+    #    brow.firstPassLogic(driver)
+    #    driver.quit()
+    #def test_secondPassLogic(self):
+    #    brow = browserUI()
+    #    user = getenv("userNames").split(',')[0]
+    #    driver = webdriver.Firefox()
+    #    target = "https://www.wizard101.com/quiz/trivia/game/fun-trivia"
+    #    target2 = "https://www.wizard101.com/quiz/trivia/game/texas-facts-trivia"
+    #    brow.login(target,driver,user)
+    #    driver.get(target2)
+    #    with open("parentData.json","r") as infile:
+    #        data = json.load(infile)
+    #    brow.secondPassLogic(driver,data[target2.split('/')[-1]],user)
+    #    driver.quit()
+    #def test_take_quiz(self):
+    #    with open("parentData.json","r") as infile: parentList = json.load(infile)
+    #    user = getenv("userNames").split(',')[0]
+    #    with open(f"{user}_cookies.json","r") as cookieFile: cookies = json.load(cookieFile)
+    #    brow = browserUI()
+    #    driver = webdriver.Firefox()
+    #    target = "https://www.wizard101.com/quiz/trivia/game/fun-trivia"
+    #    brow.login(target,driver,user)
+    #    for cookie in cookies:
+    #        del cookie["sameSite"]
+    #        driver.add_cookie(cookie)
+    #    target2 = "https://www.wizard101.com/quiz/trivia/game/horse-trivia"
+    #    brow.take_quiz(target2,driver,1,parentList,user)
+    #    driver.quit()
     def test_getAnswers(self):
         brow = browserUI()
-        target = "https://www.wizard101.com/quiz/trivia/game/ballet-trivia"
-        an = brow.getAnswers(target)
+        target = "https://www.wizard101.com/quiz/trivia/game/dog-breeds-trivia"
+        with open("parentData.json","r") as parentFile: childData = json.load(parentFile).copy()[target.split('/')[-1]]
+        an = brow.getAnswers(target,childData)
         with open("answerData.json","w",encoding='utf-8') as answerFile: json.dump(an,answerFile,indent=2)
 
     
