@@ -1,13 +1,12 @@
 webcrawler module
 
-- webscrapper class
-
-- webcrawler class
+- write function to hash image files and save them as keys
 
 browser input module
 
-- question deduction class
+main
+- GUI
+- cli
 
-- input detection evation class
-
-GUI
+storefront
+- windows
